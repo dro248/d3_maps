@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<!-- Load d3.js -->
+<script src="d3/d3.v4.min.js"></script>
+<script src="d3/d3-scale-chromatic.v1.min.js"></script>
+<script src="d3/d3-geo-projection.v2.min.js"></script>
+
+<style type="text/css">
+    path {
+        stroke: white;
+        -webkit-stroke-width: 5;
+    }
+
+    path:hover {
+        fill: pink;
+    }
+
+</style>
+
+
+<!-- Create a div where the graph will take place -->
+<div id="tips"></div>
+
+<!-- Create an element where the map will take place -->
+<svg id="my_dataviz" width="1500" height="720" style="border: 1px solid green"></svg>
+<!-- <svg id="my_dataviz" style="border: 1px solid green"></svg> -->
+
+
+<script>
+
+// Fill color
+let FILL_COLOR = 'blue'
+
+// The svg
+var svg = d3.select("svg"),
+    width = svg.attr(window.innerWidth),
+    height = svg.attr(window.innerHeight);
+
+// Map and projection
+var path = d3.geoPath();
+var projection = d3.geoMercator()
+// var projection = d3.geo.albersUsa()
+    .scale(900)
+    // .center([-450,20])
+    .center([-450,40])
+    // .translate([width / 2, height / 2]);
+    .translate([600, 400]);
+
+// Data and color scale
+var data = d3.map();
+var colorScale = d3.scaleThreshold()
+    .domain([100000, 1000000, 10000000, 30000000, 100000000, 500000000])
+    .range(d3.schemeBlues[7]);
+
+
+ // create a tooltip
+var tooltip = d3.select("body")
+    .append("div")
+    .style("position", "absolute")
+    .style("z-index", "10")
+    .style("visibility", "hidden")
+    .text("a simple tooltip");
+
+
+let ALL_STATES = null
+let MOUSE_OVER_SVG = false
+const EXCLUDED_STATES = ['Alaska', 'Puerto Rico']
+
+
+
+
+// Load external data and boot
+d3.queue()
+    .defer(d3.json, "state.geojson")
+    .await(ready);
+
+
+async function get_states(){
+    const response = await fetch('state.geojson');
+    return await response.json();
+}
+
+
+
+
+async function ready(error, topo) {
+    ALL_STATES = await get_states()
+
+
+    //  Get rid of Alaska for now
+    topo.features = topo.features.filter((d) => {
+        // return d.properties.NAME10 != "Alaska"
+        // return d.properties.NAME10 == "Texas"
+
+        // console.log(`d.properties.name`)
+        return !EXCLUDED_STATES.includes(d.properties.NAME10)
+        // return true
+    })
+
+
+    draw_map(topo)
+    
+}
+
+
+function draw_map(topo){
+    // Draw the map
+    svg.append("g")
+        .selectAll("path")
+        .data(topo.features)
+        .enter()
+        .append("path")
+        // draw each country
+        .attr("d", d3.geoPath()
+            .projection(projection)
+        )
+        
+        .attr("class", "state")
+
+
+        // set the color of each state
+        .attr("fill", function (d) {
+            return FILL_COLOR
+        })
+
+
+        .on("mouseover", function(state_obj){ 
+            var state = d3.select(this);
+            state.transition()
+                 .duration(100)
+                 // .attr("fill", 'yellow') 
+
+            // Show tooltip
+            tooltip.style("visibility", "visible")
+            tooltip.text(state_obj.properties.STUSPS10)
+            MOUSE_OVER_SVG = true
+            // console.log(state_obj)
+        })
+
+
+        .on("mouseout", function(){ 
+            var state = d3.select(this);
+            state.transition().duration(100).attr("fill", FILL_COLOR)
+
+            // Hide tooltip
+            tooltip.style("visibility", "hidden")
+            MOUSE_OVER_SVG = false
+        })
+
+        .on("mousemove", function(){
+            return tooltip.style("top", (event.pageY-10)+"px")
+                          .style("left",(event.pageX+10)+"px");
+        })
+
+
+        .on("click", function(state_obj, topo){
+            // alert(`You clicked ${state_obj.properties.STUSPS10}`)
+
+            show_state(state_obj, ALL_STATES)
+        });
+}
+
+
+
+function show_state(state_obj, topo){
+    console.log(state_obj)
+    clear_map()
+
+    // Redraw stuff
+    topo.features = topo.features.filter((d) => {
+        return d.properties.NAME10 == state_obj.properties.NAME10
+    })
+
+    draw_map(topo)
+}
+
+
+function clear_map(){
+    // clear svg
+    d3.selectAll("svg > *").remove();
+
+    // Hide tooltip
+    tooltip.style("visibility", "hidden") 
+}
+
+</script>
